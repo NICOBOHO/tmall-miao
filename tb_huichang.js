@@ -1,4 +1,4 @@
-const VERSION = '20240618-B'
+const VERSION = '20250618-B'
 
 if (!auto.service) {
     toast('无障碍服务未启动！退出！')
@@ -114,6 +114,19 @@ try {
         return null
     }
 
+
+     // 自定义一个findTextIdMatchesTimeout
+     function findTextIdMatchesTimeout(reg, timeout) {
+        let c = 0
+        while (c < timeout / 50) {
+            let result = textMatches(reg).findOnce() || idMatches(reg).findOnce()
+            if (result) return result
+            sleep(50)
+            c++
+        }
+        return null
+    }
+
     // 判断是否在活动主页
     // let checkIndex = className("android.webkit.WebView").filter(function (w) {
     //     try {
@@ -128,7 +141,7 @@ try {
     //     }
     // })
 
-    let checkIndex = textContains('O1CN013Lp0e21GnX8El4YEd')
+    let checkIndex = textContains('O1CN013Lp0e21GnX8El4')
     
     // 打开任务列表
     function openTaskList() {
@@ -143,25 +156,39 @@ try {
             // btn.click()
 
             c.click()
+            sleep(1000)
         } else {
             throw '无法找到任务列表入口'
         }
-        if (textContains('浏览商品领能量值').findOne(2000)) {
-            console.log('关闭弹窗')
-            idContains('CLOSE').findOnce().click()
-            sleep(1000)
-            let btn = c.child(c.childCount() - 1)
-            if (btn.className() == 'android.view.View') {
-                btn = c.child(c.childCount() - 2)
+        if (!text('我的能量值').findOne(5000)) {
+            if (textContains('浏览商品领能量值').findOne(2000)) {
+                console.log('关闭任务弹窗')
+                idContains('CLOSE').findOnce().click()
+                sleep(1000)
+                checkIndex.findOne(5000).click()
             }
-            btn.click()
+            if (textContains('O1CN01niEyyh1rzZKIdXktV').findOne(2000)) {
+                console.log('关闭隐藏福利弹窗')
+                c = textContains('O1CN01niEyyh1rzZKIdXktV').findOnce().parent().child(2)
+                console.hide()
+                click(c.bounds().centerX(), c.bounds().centerY())
+                console.show()
+                idContains('CLOSE').findOne(5000).click()
+                sleep(1000)
+                checkIndex.findOne(5000).click()
+            }
+            if (textContains('每日惊喜红包').findOne(2000)) {
+                console.log('关闭惊喜弹窗')
+                idContains('CLOSE').findOnce().click()
+                sleep(1000)
+                checkIndex.findOne(5000).click()
+            }
         }
-        if (!textContains('累计任务奖励').findOne(8000)) {
+        if (!text('我的能量值').findOne(8000)) {
             throw '无法打开任务列表'
         }
     }
 
-    // TODO:
     // 查找任务按钮
     function findTask() {
         var jumpButtonFind = textMatches(/去浏览|去完成/) // 找进入任务的按钮，10秒
@@ -189,7 +216,7 @@ try {
                 //     return findTask()
                 // }
                 console.log(taskName)
-                if (!(taskName.match(/天猫超市|下单|施肥|饿了么/))) {
+                if (!(taskName.match(/天猫超市|饿了么/))) {
                     return [taskName, jumpButtons[i]]
                 }
             }
@@ -210,16 +237,15 @@ try {
         // textMatches(/.*浏览得奖励.*/).findOne(15000) // 等待开始
         let finish_c = 0
         while (finish_c < 60) { // 0.5 * 60 =30 秒，防止死循环
-            if (textMatches(/.*下拉浏览.*/).exists() || textContains('下滑').exists()) {
-                console.log('进行模拟滑动')
-                swipe(device.width / 2, device.height - 200, device.width / 2 + 20, device.height - 500, 2000)
-                continue
-            }
-            let finish_reg = /.*任务已完成[\s\S]*|.*失败.*|.*上限.*|.*开小差.*|^\+[\d]*$/
+            let finish_reg = /.*任务[已]*完成[\s\S]*|.*失败.*|.*上限.*|.*开小差.*|^\+[\d]*$/
             if (textMatches(finish_reg).exists() || descMatches(finish_reg).exists()) { // 等待已完成出现，有可能失败
                 break
             }
-            if (textMatches(/.*休息会呗.*/).exists()) {
+            if (textMatches(/.*下拉浏览.*/).exists() || textContains('下滑').exists()) {
+                console.log('进行模拟滑动')
+                swipe(device.width / 2, device.height - 200, device.width / 2 + 20, device.height - 500, 2000)
+            }
+            if (textMatches(/.*进行验证.*/).exists()) {
                 alert('触发淘宝验证', '请手动验证后返回淘宝首页，重新执行任务')
                 console.log('异常退出。')
                 quit()
@@ -249,67 +275,78 @@ try {
 
     function itemTask() {
         console.log('等待页面')
-        if (!textContains('精选热卖').findOne(8000)) {
+        if (!findTextIdMatchesTimeout(/精选热卖|精选商品|J_com_2/, 8000)) {
             throw '商品页面未加载'
         }
     
-        let n = 0
+        let already = []
         while (true) {
             let done = idContains('J_wf_node_2_time').findOne(5000)
             if (!done) {
                 console.log('浏览商品任务完成，返回')
                 return
             }
-            done = parseInt(done.text(), 10)
             
-            if (n < done) n = done
-            console.log('循环完成任务，已点击', done, '个')
             let buttons = textMatches(/.*q75.*/).find()
             if (buttons.empty()) {
                 throw '无法找到商品，任务失败'
             }
-            console.log(n, buttons.length)
-            for (let i = 0; i < 10 && n + 1 > buttons.length; i++) {
-                console.log('商品数量不足，', n + 1, '向下翻页')
-                scrollDown()
-                sleep(2000)
-                scrollDown()
-                sleep(2000)
-                buttons = textMatches(/.*q75.*/).find()
-                console.log(buttons.length)
+    
+            console.log('开始查找未点击过的商品')
+            let todo = []
+            for (let i = 1; i < buttons.length; i++) {
+                let t = buttons[i].text()
+                if (already.indexOf(t) != -1) {
+                    continue
+                }
+                todo.push(buttons[i])
             }
     
-            for (let i = 1; i < buttons.length; i++) {
-                console.log('点击第', i + 1, '个')
+            if (todo.length == 0) {
+                console.log('商品数量不足，向下翻页')
+                scrollDown()
                 sleep(2000)
-                buttons[i].click()
+                scrollDown()
+                sleep(2000)
+                continue  // 重新查找一次
+            }
+            
+            for (let i = 0; i < todo.length; i++) {
+                console.log('点击第', i+1, '个', todo[i].text().split('_')[0])
+                sleep(2000)
+                todo[i].click()
+                already.push(todo[i].text())
                 console.log('等待加载')
-                if (textMatches(/加入购物车|粉丝福利购/).findOne(10000) || currentActivity() == 'com.taobao.android.detail.wrapper.activity.DetailActivity') {
+                if (textMatches(/加入购物车|粉丝福利购|去购买/).findOne(10000) || currentActivity() == 'com.taobao.android.detail.wrapper.activity.DetailActivity' || currentActivity() == 'com.taobao.android.detail.alittdetail.TTDetailActivity') {
                     console.log('商品打开成功，返回')
                     back()
-                    if (!textContains('精选热卖').findOne(10000)) {
+                    if (!findTextIdMatchesTimeout(/精选热卖|精选商品|J_com_2/, 8000)) {
                         console.log('似乎没有返回，二次尝试')
                         back()
                     }
                 } else {
-                    if (textContains('精选热卖').findOne(2000)) {
+                    if (textContains(/精选热卖|精选商品|J_com_2/).findOne(2000)) {
                         console.log('似乎没有进入，二次尝试')
                         continue
                     } else {
-                        throw '商品页未能加载'
+                        console.log('商品页未能加载')
+                        if (!findTextIdMatchesTimeout(/精选热卖|精选商品|J_com_2/, 8000)) {
+                            console.log('返回')
+                            back()
+                        }
+                        continue
                     }
                 }
-                n++
                 done = idContains('J_wf_node_2_time').findOne(5000)
                 if (!done) {
                     console.log('浏览商品任务完成，返回')
                     return
                 }
             }
+            console.log('本次循环完成，进行下一次循环')
         }
     }
 
-    // TODO:
     function backToList() {
         console.log('返回上级')
         if (checkIndex.exists()) {
@@ -334,13 +371,13 @@ try {
 
         app.startActivity({
             action: "VIEW",
-            data: "taobao://s.click.taobao.com/KDTtXmt"
+            data: "taobao://s.click.taobao.com/eLcLfnr"
         })
         sleep(2000)
 
         console.log('等待页面加载...')
     } else {
-        console.log('请在30秒内打开淘宝做任务赢红包活动页 19￥ HU9046 42qBWvBotkr￥')
+        console.log('请在30秒内打开淘宝能量活动页 8￥ HU926 bcaFVi7nGLf￥')
     }
     if (!checkIndex.findOne(30000)) {
         console.log('未能检测到任务页，退出')
@@ -376,7 +413,7 @@ try {
     }
 
     console.log('检测任务列表是否打开')
-    if (textContains('累计任务奖励').findOne(5000)) {
+    if (text('我的能量值').findOne(5000)) {
         console.log('先关闭列表')
         idContains('close_btn').findOnce().click()
         sleep(2000)
@@ -392,14 +429,14 @@ try {
         if (jumpButton == null) {
             console.log('没找到合适的任务。也许任务已经全部做完了。退出。互动任务不会自动完成。')
             console.log('请手动切换回主页面')
-            alert('任务已完成', '别忘了在脚本主页领取双11红包！互动任务需要手动完成。')
+            alert('任务已完成', '别忘了在脚本主页领取618红包！互动任务需要手动完成。')
             quit()
         }
 
         console.log('进行' + jumpButton[0] + '任务')
         sleep(2000)
 
-        if (jumpButton[0].match(/个商品/)) {
+        if (jumpButton[0].match(/个.*?商品/)) {
             jumpButton[1].click()
             sleep(2000)
             console.log('使用新版大循环方法完成')
@@ -430,7 +467,7 @@ try {
         } else if (jumpButton[0].match(/为你推荐|主会场/)) {
             jumpButton[1].click()
             liulan()
-        } else if (jumpButton[0].match(/消消乐|羊毛|新形象/)) {
+        } else if (jumpButton[0].match(/消消乐|羊毛|新形象|开盒|短视频/)) {
             jumpButton[1].click()
             console.log('参观任务，自动返回')
             sleep(5000)
